@@ -1,0 +1,58 @@
+name: Test force push flag
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/act-harness
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up local bare repo as remote
+        run: |
+          # Create a bare repo to act as the remote
+          git init --bare /tmp/remote-repo.git
+          git remote remove origin 2>/dev/null || true
+          git remote add origin /tmp/remote-repo.git
+          # Push current state to the bare repo so it has the branch
+          git push origin act-harness
+
+      - name: Create a file change to commit
+        run: |
+          echo "force-push-test-$(date +%s)" > tests/test-force-artifact.txt
+
+      - id: action
+        uses: .
+        with:
+          email: test@example.com
+          name: Test User
+          commit_message: "Force push test commit"
+          target_branch: act-harness
+          files: tests/test-force-artifact.txt
+          remote_repository: origin
+          access_token: fake-token
+          force: "1"
+          empty: "0"
+
+      - name: Assert commit was made with force push
+        run: |
+          LAST_MSG=$(git log -1 --pretty=%s)
+          echo "Last commit message: $LAST_MSG"
+          if [ "$LAST_MSG" != "Force push test commit" ]; then
+            echo "FAIL: expected commit message 'Force push test commit' but got '$LAST_MSG'"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert file was committed
+        run: |
+          git show HEAD --name-only | grep "tests/test-force-artifact.txt"
+          if [ $? -ne 0 ]; then
+            echo "FAIL: expected tests/test-force-artifact.txt in last commit"
+            exit 1
+          fi
+          echo "PASS"

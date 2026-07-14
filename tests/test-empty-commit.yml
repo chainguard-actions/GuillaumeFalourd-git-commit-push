@@ -1,0 +1,55 @@
+name: Test empty commit flag
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/act-harness
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up local bare repo as remote
+        run: |
+          # Create a bare repo to act as the remote
+          git init --bare /tmp/remote-repo.git
+          git remote remove origin 2>/dev/null || true
+          git remote add origin /tmp/remote-repo.git
+          # Push current state to the bare repo so it has the branch
+          git push origin act-harness
+
+      - name: Record commit count before action
+        run: |
+          echo "BEFORE_COUNT=$(git rev-list --count HEAD)" >> $GITHUB_ENV
+
+      - id: action
+        uses: .
+        with:
+          email: test@example.com
+          name: Test User
+          commit_message: "Empty commit test"
+          target_branch: act-harness
+          files: .
+          remote_repository: origin
+          access_token: fake-token
+          force: "0"
+          empty: "1"
+
+      - name: Assert empty commit was made
+        run: |
+          LAST_MSG=$(git log -1 --pretty=%s)
+          echo "Last commit message: $LAST_MSG"
+          if [ "$LAST_MSG" != "Empty commit test" ]; then
+            echo "FAIL: expected commit message 'Empty commit test' but got '$LAST_MSG'"
+            exit 1
+          fi
+          AFTER_COUNT=$(git rev-list --count HEAD)
+          echo "Before: $BEFORE_COUNT, After: $AFTER_COUNT"
+          if [ "$AFTER_COUNT" -le "$BEFORE_COUNT" ]; then
+            echo "FAIL: expected a new commit to be created"
+            exit 1
+          fi
+          echo "PASS"

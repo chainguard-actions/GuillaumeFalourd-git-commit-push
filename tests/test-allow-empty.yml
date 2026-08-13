@@ -1,0 +1,68 @@
+name: Test allow empty commit option
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-allow-empty:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up git identity
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+      - name: Set up local bare repo as origin (avoid pushing to GitHub)
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/.git-remote"
+          git init --bare "$GITHUB_WORKSPACE/.git-remote"
+          git push "$GITHUB_WORKSPACE/.git-remote" HEAD:refs/heads/act-harness
+          git remote set-url origin "$GITHUB_WORKSPACE/.git-remote" 2>/dev/null || \
+            git remote add origin "$GITHUB_WORKSPACE/.git-remote"
+
+      - name: Ensure working tree is clean
+        run: |
+          git checkout -- . 2>/dev/null || true
+          git status --porcelain
+
+      - name: Record commit count before action
+        id: before
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+          echo "Before commit count: $COUNT"
+
+      - id: action
+        uses: .
+        with:
+          email: "test@example.com"
+          name: "Test User"
+          commit_message: "Empty commit test"
+          target_branch: "act-harness"
+          files: "."
+          remote_repository: "origin"
+          access_token: ${{ github.token }}
+          force: "1"
+          empty: "1"
+
+      - name: Assert empty commit was created
+        env:
+          BEFORE: ${{ steps.before.outputs.count }}
+        run: |
+          AFTER=$(git rev-list --count HEAD)
+          echo "Before: $BEFORE, After: $AFTER"
+          if [ "$AFTER" -le "$BEFORE" ]; then
+            echo "FAIL: expected a new commit to be created (empty commit), but commit count did not increase"
+            exit 1
+          fi
+          LAST_MSG=$(git log -1 --pretty=%s)
+          echo "Last commit message: $LAST_MSG"
+          if [ "$LAST_MSG" != "Empty commit test" ]; then
+            echo "FAIL: expected last commit message to be 'Empty commit test', got: $LAST_MSG"
+            exit 1
+          fi
+          echo "PASS: empty commit was created with correct message"

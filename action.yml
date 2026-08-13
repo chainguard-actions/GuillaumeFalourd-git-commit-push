@@ -80,50 +80,7 @@ runs:
         INPUT_REMOTE_REPOSITORY: ${{ inputs.remote_repository }}
         GITHUB_RUN_ID_VAL: ${{ github.run_id }}
         GITHUB_JOB_VAL: ${{ github.job }}
-      run: |
-        CURRENT_BRANCH=${GITHUB_REF}
-        case "$CURRENT_BRANCH" in "refs/heads/"*)
-            CURRENT_BRANCH=$(echo "$CURRENT_BRANCH" | sed "s@refs/heads/@@")
-        esac
-        TARGET_BRANCH="$INPUT_TARGET_BRANCH"
-        case "$TARGET_BRANCH" in "refs/heads/"*)
-            TARGET_BRANCH=$(echo "$TARGET_BRANCH" | sed "s@refs/heads/@@")
-        esac
-
-        if [ "$INPUT_FORCE" != "0" ]; then
-            FORCE='--force'
-        fi
-        if [ "$INPUT_EMPTY" != "0" ]; then
-            EMPTY='--allow-empty'
-        fi
-        if [ "$INPUT_TAGS" != "0" ]; then
-            TAGS='--tags'
-        fi
-
-        echo "machine github.com" > "$HOME/.netrc"
-        echo "  login $GITHUB_ACTOR" >> "$HOME/.netrc"
-        echo "  password $INPUT_ACCESS_TOKEN" >> "$HOME/.netrc"
-
-        echo "machine api.github.com" >> "$HOME/.netrc"
-        echo "  login $GITHUB_ACTOR" >> "$HOME/.netrc"
-        echo "  password $INPUT_ACCESS_TOKEN" >> "$HOME/.netrc"
-
-        git config --local user.email "$INPUT_EMAIL"
-        git config --local user.name "$INPUT_NAME"
-
-        if [[ `git status --porcelain` ]]; then
-          git add "$INPUT_FILES" -v
-          git commit -m "$INPUT_COMMIT_MESSAGE" ${EMPTY:+"$EMPTY"}
-          git branch "push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}"
-          git fetch "$INPUT_REMOTE_REPOSITORY" "$CURRENT_BRANCH"
-          git checkout "$CURRENT_BRANCH"
-          git merge "push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}"
-          git branch -d "push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}"
-
-          git push "$INPUT_REMOTE_REPOSITORY" "$CURRENT_BRANCH:$TARGET_BRANCH" --follow-tags ${FORCE:+"$FORCE"} ${TAGS:+"$TAGS"}
-        else
-          echo "WARNING: No changes were detected. git commit push action aborted."
-        fi
+      run: "CURRENT_BRANCH=${GITHUB_REF}\ncase \"$CURRENT_BRANCH\" in \"refs/heads/\"*)\n    CURRENT_BRANCH=$(echo \"$CURRENT_BRANCH\" | sed \"s@refs/heads/@@\")\nesac\nTARGET_BRANCH=\"$INPUT_TARGET_BRANCH\"\ncase \"$TARGET_BRANCH\" in \"refs/heads/\"*)\n    TARGET_BRANCH=$(echo \"$TARGET_BRANCH\" | sed \"s@refs/heads/@@\")\nesac\n\nif [ \"$INPUT_FORCE\" != \"0\" ]; then\n    FORCE='--force'\nfi\nif [ \"$INPUT_EMPTY\" != \"0\" ]; then\n    EMPTY='--allow-empty'\nfi\nif [ \"$INPUT_TAGS\" != \"0\" ]; then\n    TAGS='--tags'\nfi\n\necho \"machine github.com\" > \"$HOME/.netrc\"\necho \"  login $GITHUB_ACTOR\" >> \"$HOME/.netrc\"\necho \"  password $INPUT_ACCESS_TOKEN\" >> \"$HOME/.netrc\"\n\necho \"machine api.github.com\" >> \"$HOME/.netrc\"\necho \"  login $GITHUB_ACTOR\" >> \"$HOME/.netrc\"\necho \"  password $INPUT_ACCESS_TOKEN\" >> \"$HOME/.netrc\"\n\ngit config --local user.email \"$INPUT_EMAIL\"\ngit config --local user.name \"$INPUT_NAME\"\n\nif [[ `git status --porcelain` ]]; then\n  git add \"$INPUT_FILES\" -v\n  git commit -m \"$INPUT_COMMIT_MESSAGE\" $EMPTY\n  git branch \"push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}\"\n  git fetch \"$INPUT_REMOTE_REPOSITORY\" \"$CURRENT_BRANCH\"\n  git checkout \"$CURRENT_BRANCH\"\n  git merge \"push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}\"\n  git branch -d \"push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}\"\n\n  git push \"$INPUT_REMOTE_REPOSITORY\" \"$CURRENT_BRANCH:$TARGET_BRANCH\" --follow-tags $FORCE $TAGS        \nelse\n  echo \"WARNING: No changes were detected. git commit push action aborted.\"\nfi\n"
       shell: bash
     - name: Git push and commit remote
       if: ${{ inputs.remote_repository != 'origin' }}
@@ -151,7 +108,7 @@ runs:
             HOSTNAME=${BASH_REMATCH[3]}
             DESTINATION_OWNER=${BASH_REMATCH[4]}
             DESTINATION_REPOSITORY=${BASH_REMATCH[5]}
-            if [[ "$DESTINATION_REPOSITORY" == *'.git'* ]] && [[ "$DESTINATION_REPOSITORY" != *'.github.io'* ]]; then
+            if [[ $DESTINATION_REPOSITORY == *'.git'* ]] && [[ $DESTINATION_REPOSITORY != *'.github.io'* ]]; then
               DESTINATION_REPOSITORY=${DESTINATION_REPOSITORY//.git/ }
             fi
 

@@ -1,0 +1,31 @@
+name: Test force push flag (no changes)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/act-harness
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run git commit push action with force flag (no changes)
+        id: action
+        uses: .
+        with:
+          email: test@example.com
+          name: Test User
+          commit_message: "Force push test commit"
+          target_branch: act-harness
+          files: "."
+          remote_repository: origin
+          access_token: fake-token
+          force: "1"
+          empty: "0"
+          tags: "0"
+
+      - name: Assert action completed without error
+        run: |
+          echo "Action with force flag completed successfully (no changes path)"
+          echo "PASS"

@@ -77,8 +77,6 @@ runs:
         INPUT_FILES: ${{ inputs.files }}
         INPUT_COMMIT_MESSAGE: ${{ inputs.commit_message }}
         INPUT_REMOTE_REPOSITORY: ${{ inputs.remote_repository }}
-        GITHUB_RUN_ID_VAL: ${{ github.run_id }}
-        GITHUB_JOB_VAL: ${{ github.job }}
       run: |
         CURRENT_BRANCH=${GITHUB_REF}
         case "$CURRENT_BRANCH" in "refs/heads/"*)
@@ -109,16 +107,21 @@ runs:
 
         git config --local user.email "$INPUT_EMAIL"
         git config --local user.name "$INPUT_NAME"
-        read -ra FILES_ARRAY <<< "$INPUT_FILES"
-        git add "${FILES_ARRAY[@]}" -v
+
+        files=()
+        if [ -n "$INPUT_FILES" ]; then
+          while IFS= read -r -d '' t; do files+=("$t"); done \
+            < <(printf '%s' "$INPUT_FILES" | xargs printf '%s\0')
+        fi
+        git add "${files[@]}" -v
+
         git commit -m "$INPUT_COMMIT_MESSAGE" $EMPTY
 
-        BRANCH_NAME="push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}"
-        git branch "$BRANCH_NAME"
+        git branch "push-and-commit-action-${GITHUB_RUN_ID}-${GITHUB_JOB}"
         git fetch "$INPUT_REMOTE_REPOSITORY" "$CURRENT_BRANCH"
         git checkout "$CURRENT_BRANCH"
-        git merge "$BRANCH_NAME"
-        git branch -d "$BRANCH_NAME"
+        git merge "push-and-commit-action-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+        git branch -d "push-and-commit-action-${GITHUB_RUN_ID}-${GITHUB_JOB}"
 
         git push "$INPUT_REMOTE_REPOSITORY" "$CURRENT_BRANCH:$TARGET_BRANCH" --follow-tags $FORCE $TAGS
       shell: bash

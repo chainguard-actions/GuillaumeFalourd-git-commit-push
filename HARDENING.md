@@ -10,59 +10,87 @@
 
 **Harden Agent Version:** `2`
 
-Action **GuillaumeFalourd--git-commit-push/v1.2** was hardened automatically. 28 finding(s) were identified and resolved across 2 iteration(s).
+Action **GuillaumeFalourd--git-commit-push/v1.2** was hardened automatically. 27 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Both `run:` blocks in action.yml directly interpolate `${{ inputs.* }}` and `${{ github.* }}` expressions inside shell commands without routing through env vars or quoting, violating sub-rule (a). An attacker who controls these inputs can inject arbitrary shell commands. Examples include:
-- `TARGET_BRANCH=${{ inputs.target_branch }}` (unquoted direct interpolation, step 1)
-- `if [ "${{ inputs.force }}" != "0" ]` (step 1)
-- `echo "  password ${{ inputs.access_token }}"` (step 1)
-- `git config --local user.email "${{ inputs.email }}"` (step 1)
-- `git add ${{ inputs.files }} -v` (unquoted, step 1)
-- `git commit -m "${{ inputs.commit_message }}"` (step 1)
-- `git branch push-and-commit-action-${{ github.run_id }}-${{ github.job }}` (step 1)
-- `if [ -z "${{ inputs.access_token }}" ]` (step 2)
-- `if [[ ${{ inputs.remote_repository }} =~ $REGEX ]]` (unquoted, step 2)
-- `git clone "https://${{ inputs.access_token }}@github.com/..."` (step 2)
-- `cp -rvf "${{ inputs.files }}" "$CLONE_DIRECTORY"` (step 2)
-- `REMOTE_URL=https://$DESTINATION_OWNER:${{ inputs.access_token }}@...` (step 2)
-- `git add ${{ inputs.files }}` (unquoted, step 2)
-- `git checkout -b ${{ inputs.target_branch }}` (step 2)
-- `git push -f -u origin "${{ inputs.target_branch }}"` (step 2)
+Step 'Git push and commit origin': Multiple ${{ inputs.* }} and ${{ github.* }} expressions are interpolated directly inside the run: shell script, violating rule (a). Attacker-controlled inputs flow directly into shell commands without any env: indirection. Offending lines include:
+- `TARGET_BRANCH=${{ inputs.target_branch }}` (unquoted — shell parses the value directly)
+- `if [ "${{ inputs.force }}" != "0" ]`
+- `if [ "${{ inputs.empty }}" != "0" ]`
+- `if [ "${{ inputs.tags }}" != "0" ]`
+- `echo "  password ${{ inputs.access_token }}"` (×2, written to .netrc)
+- `git config --local user.email "${{ inputs.email }}"`
+- `git config --local user.name "${{ inputs.name }}"`
+- `git add ${{ inputs.files }} -v` (unquoted)
+- `git commit -m "${{ inputs.commit_message }}"`
+- `git branch push-and-commit-action-${{ github.run_id }}-${{ github.job }}`
+- `git fetch "${{ inputs.remote_repository }}"`
+- `git merge push-and-commit-action-${{ github.run_id }}-${{ github.job }}`
+- `git branch -d push-and-commit-action-${{ github.run_id }}-${{ github.job }}`
+- `git push "${{ inputs.remote_repository }}"`
+Any of these inputs can contain shell metacharacters (`;`, `|`, `$(...)`, etc.) injected by a caller.
 
 Locations:
 
-- `action.yml:55`
+- `action.yml:64`
+- `action.yml:69`
+- `action.yml:72`
+- `action.yml:75`
+- `action.yml:81`
+- `action.yml:85`
+- `action.yml:87`
+- `action.yml:88`
+- `action.yml:91`
+- `action.yml:92`
+- `action.yml:93`
+- `action.yml:94`
+- `action.yml:96`
 - `action.yml:97`
+- `action.yml:99`
 
-### unpinned-uses (severity: high)
+### script-injection (severity: high)
 
-All three workflow files use `uses:` references pinned to mutable tags or branches rather than full 40-character commit SHAs. Specifically:
-- `actions/checkout@v2.3.4` (version tag, not a SHA) appears in all three workflow files.
-- `GuillaumeFalourd/git-commit-push@main` (branch name, not a SHA) appears in all three workflow files.
-These can be silently updated by the upstream repository owner to inject malicious code.
+Step 'Git push and commit remote': Multiple ${{ inputs.* }} and ${{ github.* }} expressions are interpolated directly inside the run: shell script, violating rule (a). Offending lines include:
+- `if [ -z "${{ inputs.access_token }}" ]`
+- `if [[ ${{ inputs.remote_repository }} =~ $REGEX ]]` (unquoted — regex match with attacker-controlled value)
+- `git config --global user.email "${{ inputs.email }}"`
+- `git config --global user.name "${{ inputs.name }}"`
+- `git clone "https://${{ inputs.access_token }}@github.com/..."`
+- `cp -rvf "${{ inputs.files }}" "$CLONE_DIRECTORY"`
+- `REMOTE_URL=https://$DESTINATION_OWNER:${{ inputs.access_token }}@...` (unquoted)
+- `git add ${{ inputs.files }}` (unquoted)
+- `git commit --message "${{ inputs.commit_message }}"`
+- `git branch copy-push-files-action-${{ github.run_id }}-${{ github.job }}`
+- `BE=$(git ls-remote --heads origin ${{ inputs.target_branch }} | wc -l)` (unquoted)
+- `git checkout -b ${{ inputs.target_branch }}` (unquoted)
+- `git checkout ${{ inputs.target_branch }}` (unquoted)
+- `git merge -X theirs copy-push-files-action-${{ github.run_id }}-${{ github.job }}`
+- `git branch -d copy-push-files-action-${{ github.run_id }}-${{ github.job }}`
+- `git push -f -u origin "${{ inputs.target_branch }}"`
+An attacker controlling any of these inputs can inject arbitrary shell commands.
 
 Locations:
 
-- `.github/workflows/macos_action_test.yml:14`
-- `.github/workflows/macos_action_test.yml:16`
-- `.github/workflows/ubuntu_action_test.yml:14`
-- `.github/workflows/ubuntu_action_test.yml:16`
-- `.github/workflows/windows_action_test.yml:14`
-- `.github/workflows/windows_action_test.yml:16`
-
-### missing-permissions (severity: medium)
-
-None of the three workflow files define a top-level `permissions:` key, and no individual job within any of these files defines a `permissions:` key either. Without explicit permissions, workflows run with the default (often broad) token permissions, violating the principle of least privilege.
-
-Locations:
-
-- `.github/workflows/macos_action_test.yml:1`
-- `.github/workflows/ubuntu_action_test.yml:1`
-- `.github/workflows/windows_action_test.yml:1`
+- `action.yml:106`
+- `action.yml:113`
+- `action.yml:120`
+- `action.yml:121`
+- `action.yml:125`
+- `action.yml:130`
+- `action.yml:133`
+- `action.yml:136`
+- `action.yml:139`
+- `action.yml:141`
+- `action.yml:144`
+- `action.yml:147`
+- `action.yml:149`
+- `action.yml:151`
+- `action.yml:152`
+- `action.yml:155`
+- `action.yml:161`
 
 ### static-inline-injection (severity: high)
 
@@ -268,29 +296,15 @@ Locations:
 
 ### Iteration 1
 
-**Fixes applied:** script-injection, static-inline-injection, unpinned-uses, missing-permissions
+**Fixes applied:** script-injection, static-inline-injection
 
 **Notes:**
 
-Fixed all findings in action.yml and the three workflow files:
-
-1. **script-injection / static-inline-injection** (action.yml): All ${{ inputs.* }} and ${{ github.* }} expressions in both run: blocks (steps 'Git push and commit origin' and 'Git push and commit remote') were moved to env: blocks. Variables are now referenced as plain shell env vars (INPUT_TARGET_BRANCH, INPUT_FORCE, INPUT_EMPTY, INPUT_TAGS, INPUT_ACCESS_TOKEN, INPUT_EMAIL, INPUT_NAME, INPUT_FILES, INPUT_COMMIT_MESSAGE, INPUT_REMOTE_REPOSITORY, GITHUB_RUN_ID_VAL, GITHUB_JOB_VAL).
-
-2. **unpinned-uses** (macos_action_test.yml, ubuntu_action_test.yml, windows_action_test.yml): Pinned actions/checkout@v2.3.4 to SHA 5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f and GuillaumeFalourd/git-commit-push@main to SHA 954983f1f22b9695ffee7d2456c00d100763ada6.
-
-3. **missing-permissions** (all three workflow files): Added top-level 'permissions: contents: write' to each workflow file, as the workflows need to push commits to the repository.
-
-### Iteration 2
-
-**Fixes applied:** script-injection
-
-**Notes:**
-
-Fixed four unquoted variable expansions in action.yml that could allow shell word splitting and glob expansion on attacker-controlled inputs:
-1. `case $CURRENT_BRANCH in` → `case "$CURRENT_BRANCH" in` (step 1, prevents glob expansion)
-2. `case $TARGET_BRANCH in` → `case "$TARGET_BRANCH" in` (step 1, line 63, prevents glob expansion on workflow-controllable `inputs.target_branch`)
-3. `git add $INPUT_FILES -v` → `git add "$INPUT_FILES" -v` (step 1, line 82, prevents word splitting/glob on `inputs.files`)
-4. `git add $INPUT_FILES` → `git add "$INPUT_FILES"` (step 2, line 143, prevents word splitting/glob on `inputs.files`)
-
-All `$INPUT_FILES` and `$TARGET_BRANCH` expansions are now properly double-quoted throughout both run blocks.
+Fixed all script injection findings in action.yml by:
+1. Added env: blocks to both 'Git push and commit origin' and 'Git push and commit remote' steps, mapping all ${{ inputs.* }} and ${{ github.* }} expressions to environment variables (INPUT_TARGET_BRANCH, INPUT_FORCE, INPUT_EMPTY, INPUT_TAGS, INPUT_ACCESS_TOKEN, INPUT_EMAIL, INPUT_NAME, INPUT_FILES, INPUT_COMMIT_MESSAGE, INPUT_REMOTE_REPOSITORY, GITHUB_RUN_ID_VAL, GITHUB_JOB_VAL).
+2. Replaced all inline ${{ }} expressions in run: blocks with their corresponding $ENV_VAR references, properly double-quoted.
+3. The 'files' input (space-separated list) is tokenized using the xargs/while-read-NUL pattern to preserve argument boundaries and handle quoted paths correctly.
+4. Branch names using run_id and job are now constructed from shell variables: "push-and-commit-action-${GITHUB_RUN_ID_VAL}-${GITHUB_JOB_VAL}".
+5. The regex match for remote_repository now uses $INPUT_REMOTE_REPOSITORY instead of the inline expression.
+6. The REMOTE_URL construction in the remote step now uses properly quoted shell variables.
 

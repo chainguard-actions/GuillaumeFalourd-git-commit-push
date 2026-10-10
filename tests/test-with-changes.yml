@@ -1,0 +1,62 @@
+name: Test commit with file changes
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/act-harness
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Configure git identity and set up local branch
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          # Ensure act-harness branch exists locally (act runs in detached HEAD)
+          git checkout -B act-harness
+
+      - name: Create a test file to commit
+        run: |
+          echo "test content $(date)" > test-output.txt
+
+      - name: Set up fake remote to allow push
+        run: |
+          # Create a bare clone to act as the remote (after branch is set up)
+          git clone --bare . /tmp/fake-remote.git
+          git remote set-url origin /tmp/fake-remote.git
+
+      - id: action
+        uses: .
+        with:
+          email: test@example.com
+          name: Test User
+          commit_message: "Automated test commit"
+          target_branch: act-harness
+          files: "test-output.txt"
+          remote_repository: origin
+          access_token: fake-token
+          force: "0"
+          empty: "0"
+
+      - name: Assert file was committed
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          echo "Last commit message: $COMMIT_MSG"
+          if [ "$COMMIT_MSG" != "Automated test commit" ]; then
+            echo "FAIL: expected commit message 'Automated test commit', got '$COMMIT_MSG'"
+            exit 1
+          fi
+          echo "PASS: commit was created with correct message"
+
+      - name: Assert test file exists in last commit
+        run: |
+          FILES_IN_COMMIT=$(git show --name-only HEAD | tail -n +7)
+          echo "Files in last commit: $FILES_IN_COMMIT"
+          if ! git show --name-only HEAD | grep -q "test-output.txt"; then
+            echo "FAIL: test-output.txt not found in last commit"
+            exit 1
+          fi
+          echo "PASS: test-output.txt found in last commit"

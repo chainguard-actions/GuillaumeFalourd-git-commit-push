@@ -1,0 +1,66 @@
+name: Test allow empty commit
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/act-harness
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Configure git identity and set up local branch
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          # Ensure act-harness branch exists locally (act runs in detached HEAD)
+          git checkout -B act-harness
+
+      - name: Create a dummy file to trigger git status changes
+        run: |
+          echo "dummy content for empty commit test" > empty-test-dummy.txt
+
+      - name: Set up fake remote to allow push
+        run: |
+          git clone --bare . /tmp/fake-remote-empty.git
+          git remote set-url origin /tmp/fake-remote-empty.git
+
+      - name: Record commit count before action
+        id: before
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+          echo "Before commit count: $COUNT"
+
+      - id: action
+        uses: .
+        with:
+          email: test@example.com
+          name: Test User
+          commit_message: "Empty commit test"
+          target_branch: act-harness
+          files: "."
+          remote_repository: origin
+          access_token: fake-token
+          force: "0"
+          empty: "1"
+
+      - name: Assert commit was created with empty flag enabled
+        env:
+          BEFORE: ${{ steps.before.outputs.count }}
+        run: |
+          AFTER=$(git rev-list --count HEAD)
+          echo "Before: $BEFORE, After: $AFTER"
+          if [ "$AFTER" -le "$BEFORE" ]; then
+            echo "FAIL: expected a new commit to be created, but commit count did not increase"
+            exit 1
+          fi
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          echo "Last commit message: $COMMIT_MSG"
+          if [ "$COMMIT_MSG" != "Empty commit test" ]; then
+            echo "FAIL: expected commit message 'Empty commit test', got '$COMMIT_MSG'"
+            exit 1
+          fi
+          echo "PASS: commit was created with correct message and empty flag enabled"

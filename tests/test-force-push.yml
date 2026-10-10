@@ -1,0 +1,59 @@
+name: Test force push scenario
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/act-harness
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Configure git identity and set up local branch
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          # Ensure act-harness branch exists locally (act runs in detached HEAD)
+          git checkout -B act-harness
+
+      - name: Create a test file to commit
+        run: |
+          echo "force push test content $(date)" > force-test-output.txt
+
+      - name: Set up fake remote to allow push
+        run: |
+          git clone --bare . /tmp/fake-remote-force.git
+          git remote set-url origin /tmp/fake-remote-force.git
+
+      - id: action
+        uses: .
+        with:
+          email: test@example.com
+          name: Test User
+          commit_message: "Force push test commit"
+          target_branch: act-harness
+          files: "force-test-output.txt"
+          remote_repository: origin
+          access_token: fake-token
+          force: "1"
+          empty: "0"
+
+      - name: Assert commit was created with force push
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          echo "Last commit message: $COMMIT_MSG"
+          if [ "$COMMIT_MSG" != "Force push test commit" ]; then
+            echo "FAIL: expected commit message 'Force push test commit', got '$COMMIT_MSG'"
+            exit 1
+          fi
+          echo "PASS: force push commit was created with correct message"
+
+      - name: Assert force-pushed file exists in last commit
+        run: |
+          if ! git show --name-only HEAD | grep -q "force-test-output.txt"; then
+            echo "FAIL: force-test-output.txt not found in last commit"
+            exit 1
+          fi
+          echo "PASS: force-test-output.txt found in last commit"

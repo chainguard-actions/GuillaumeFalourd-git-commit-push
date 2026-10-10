@@ -1,0 +1,50 @@
+name: Test no changes scenario
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/act-harness
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Configure git identity and set up local branch
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          # Ensure act-harness branch exists locally (act runs in detached HEAD)
+          git checkout -B act-harness
+
+      - name: Set up fake remote
+        run: |
+          git clone --bare . /tmp/fake-remote-nochanges.git
+          git remote set-url origin /tmp/fake-remote-nochanges.git
+
+      - id: action
+        uses: .
+        with:
+          email: test@example.com
+          name: Test User
+          commit_message: "Test commit - no changes"
+          target_branch: act-harness
+          files: "."
+          remote_repository: origin
+          access_token: fake-token-no-push-needed
+          force: "0"
+          empty: "0"
+
+      - name: Assert action completed without error and no new commit
+        run: |
+          # When there are no changes, the action prints a warning and exits cleanly
+          echo "Action completed successfully (no changes to commit)"
+          # Verify the last commit message is NOT our test message (no commit was made)
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          echo "Last commit message: $COMMIT_MSG"
+          if [ "$COMMIT_MSG" = "Test commit - no changes" ]; then
+            echo "FAIL: action should not have created a commit when there are no changes"
+            exit 1
+          fi
+          echo "PASS: no commit was created as expected"
